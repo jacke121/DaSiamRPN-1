@@ -1,6 +1,8 @@
 # --------------------------------------------------------
 # DaSiamRPN
 #!/usr/bin/python
+import time
+
 import vot
 from vot import Rectangle, Point, Polygon, convert_region, parse_region
 import os, sys
@@ -25,7 +27,7 @@ for i in range(10):
     net(torch.autograd.Variable(torch.FloatTensor(1, 3, 255, 255)).cuda())
 
 # start to track
-data_root = "/home/ivlab/data/vot2017/"
+data_root =r"D:\data\vot2017/"
 dirs = os.listdir(data_root)
 for dir_name in dirs:
     # if (dir_name != "conduction1"):
@@ -63,14 +65,14 @@ for dir_name in dirs:
         frame = frame + 1
         if frame >= len(images):
             break
-        print(frame)
         image_file = images[frame]
         if not image_file:
             break
         im = cv2.imread(image_file)  # HxWxC
+        start=time.time()
         state = SiamRPN_track(state, im)  # track
         res = cxy_wh_2_rect(state['target_pos'], state['target_sz'])
-
+        print(frame,time.time()-start)
         img = im.copy()
         cv2.rectangle(img, (int(res[0]), int(res[1])), (int(res[0] + res[2]), int(res[1] + res[3])), (0, 255, 0), 2)
         cv2.imshow("Tracking", img)

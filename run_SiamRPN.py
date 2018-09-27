@@ -117,7 +117,7 @@ def SiamRPN_init(im, target_pos, target_sz, net):
     else:
         p.instance_size = 271
 
-    p.score_size = (p.instance_size - p.exemplar_size) / p.total_stride + 1
+    p.score_size = (p.instance_size - p.exemplar_size) // p.total_stride + 1
 
     p.anchor = generate_anchor(p.total_stride, p.scales, p.ratios, p.score_size)
 
