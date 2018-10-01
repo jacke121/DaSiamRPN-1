@@ -1,5 +1,6 @@
 data/
 pretrained/
+checkpoint_dir/
 mouse/
 __pycache__/
 pth_OTB2015

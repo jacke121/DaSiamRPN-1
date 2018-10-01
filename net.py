@@ -3,6 +3,7 @@
 # Licensed under The MIT License
 # Written by Qiang Wang (wangqiang2015 at ia.ac.cn)
 # --------------------------------------------------------
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -30,24 +31,53 @@ class SiamRPNBIG(nn.Module):
             nn.Conv2d(768, 512, 3),
             nn.BatchNorm2d(512),
         )
-        self.conv_r1 = nn.Conv2d(feat_in, feature_out*4*anchor, 3)
-        self.conv_r2 = nn.Conv2d(feat_in, feature_out, 3)
-        self.conv_cls1 = nn.Conv2d(feat_in, feature_out*2*anchor, 3)
-        self.conv_cls2 = nn.Conv2d(feat_in, feature_out, 3)
-        self.regress_adjust = nn.Conv2d(4*anchor, 4*anchor, 1)
 
-        self.r1_kernel = []
+        self.conv_reg1 = nn.Conv2d(feat_in, feature_out * 4 * anchor, 3)
+        self.conv_reg2 = nn.Conv2d(feat_in, feature_out, 3)
+        self.conv_cls1 = nn.Conv2d(feat_in, feature_out * 2 * anchor, 3)
+        self.conv_cls2 = nn.Conv2d(feat_in, feature_out, 3)
+        self.regress_adjust = nn.Conv2d(4 * anchor, 4 * anchor, 1)
+
+        self.reg1_kernel = []
         self.cls1_kernel = []
 
     def forward(self, x):
         x_f = self.featureExtract(x)
-        return self.regress_adjust(F.conv2d(self.conv_r2(x_f), self.r1_kernel)), \
+
+        batch_size = x_f.size(0)
+        reg_conv_output = self.conv_reg2(x_f)
+        cls_conv_output = self.conv_cls2(x_f)
+
+        cls_corr_list = []
+        reg_corr_list = []
+        for i_batch in range(batch_size):
+            i_cls_corr = F.conv2d(torch.unsqueeze(cls_conv_output[i_batch], 0), self.cls1_kernel[i_batch])
+            cls_corr_list.append(i_cls_corr)
+            i_reg_corr = F.conv2d(torch.unsqueeze(reg_conv_output[i_batch], 0), self.reg1_kernel[i_batch])
+            i_reg_corr = self.regress_adjust(i_reg_corr)
+            reg_corr_list.append(i_reg_corr)
+
+        cls_corr = torch.stack(cls_corr_list, dim=0)
+        cls_corr = torch.squeeze(cls_corr)
+        reg_corr = torch.stack(reg_corr_list, dim=0)
+        reg_corr = torch.squeeze(reg_corr)
+
+        """
+        # return tensors of shape (17,17,4K) and (17,17,2k), respectively 
+        return self.regress_adjust(
+			F.conv2d(self.conv_reg2(x_f), self.reg1_kernel)
+			), \
                F.conv2d(self.conv_cls2(x_f), self.cls1_kernel)
+        """
+        return reg_corr, cls_corr  # of shape (50, 4K, 17, 17), (50, 2K, 17, 17)
 
     def temple(self, z):
         z_f = self.featureExtract(z)
-        r1_kernel_raw = self.conv_r1(z_f)
+        reg1_kernel_raw = self.conv_reg1(z_f)
         cls1_kernel_raw = self.conv_cls1(z_f)
-        kernel_size = r1_kernel_raw.data.size()[-1]
-        self.r1_kernel = r1_kernel_raw.view(self.anchor*4, self.feature_out, kernel_size, kernel_size)
-        self.cls1_kernel = cls1_kernel_raw.view(self.anchor*2, self.feature_out, kernel_size, kernel_size)
+        kernel_size = reg1_kernel_raw.data.size()[-1]
+
+        self.reg1_kernel = reg1_kernel_raw.view(-1, self.anchor * 4, self.feature_out, kernel_size,
+                                                kernel_size)  # 50, 4K, 512, 4, 4
+        self.cls1_kernel = cls1_kernel_raw.view(-1, self.anchor * 2, self.feature_out, kernel_size,
+                                                kernel_size)  # 50, 2K, 512, 4, 4
